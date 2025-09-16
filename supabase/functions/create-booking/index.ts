@@ -63,8 +63,8 @@ Deno.serve(async (req) => {
         },
       ],
       mode: 'payment',
-      success_url: `${Deno.env.get('FRONTEND_URL') || 'http://localhost:3001'}/booking-confirmation?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${Deno.env.get('FRONTEND_URL') || 'http://localhost:3001'}/`,
+      success_url: `${Deno.env.get('FRONTEND_URL') || 'http://localhost:3000'}/booking-confirmation?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${Deno.env.get('FRONTEND_URL') || 'http://localhost:3000'}/`,
       metadata: {
         slot_id: slotId,
         customer_email: customerEmail,

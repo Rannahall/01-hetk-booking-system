@@ -27,7 +27,7 @@ export default function SlotPicker() {
     const nextWeek = new Date()
     nextWeek.setDate(nextWeek.getDate() + 7)
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('available_slots')
       .select('*')
       .eq('is_available', true)
@@ -166,7 +166,7 @@ function BookingForm({ slot }: { slot: Slot }) {
       } else {
         alert('Error: ' + result.error)
       }
-    } catch (error) {
+    } catch {
       alert('Booking failed')
     } finally {
       setLoading(false)

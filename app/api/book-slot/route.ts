@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
 
- // @ts-ignore
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-06-20',
 })
@@ -72,9 +71,9 @@ export async function POST(request: NextRequest) {
       clientSecret: paymentIntent.client_secret
     })
     
-  } catch (error: any) {
+  } catch (error) {
     return NextResponse.json(
-      { error: error.message },
+      { error: error instanceof Error ? error.message : 'An error occurred' },
       { status: 500 }
     )
   }
