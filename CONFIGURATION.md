@@ -468,8 +468,120 @@ SET rule_value = (
   FROM jsonb_each(rule_value)
 ),
 updated_at = NOW()
-WHERE rule_type = 'pricing' 
+WHERE rule_type = 'pricing'
 AND rule_key = 'weekend_rates';
 ```
+
+## Production Configuration
+
+### Environment Variables Setup
+
+#### Vercel Environment Variables
+**Location:** Vercel Dashboard → Project Settings → Environment Variables
+
+| Variable Name | Value | Environment | Notes |
+|---------------|--------|-------------|--------|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://[project-ref].supabase.co` | Production | Your Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `[your-anon-key]` | Production | Anonymous key from Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | `[your-service-key]` | Production | Service role key (keep secret) |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_test_[key]` | Production | Stripe publishable key |
+| `STRIPE_SECRET_KEY` | `sk_test_[key]` | Production | Stripe secret key |
+
+#### Supabase Edge Functions Environment Variables
+**Location:** Supabase Dashboard → Settings → Edge Functions → Environment Variables
+
+| Variable Name | Value | Notes |
+|---------------|--------|--------|
+| `SUPABASE_URL` | `https://[project-ref].supabase.co` | Auto-populated by Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | `sk-[service-key]` | Auto-populated |
+| `STRIPE_SECRET_KEY` | `sk_test_[key]` | For webhook processing |
+| `FRONTEND_URL` | `https://your-vercel-app.vercel.app` | **Required for production redirects** |
+
+### Stripe Webhook Configuration
+
+#### Setup Steps:
+1. **Stripe Dashboard** → Developers → Webhooks → Add Endpoint
+2. **Endpoint URL:** `https://[project-ref].supabase.co/functions/v1/stripe-webhook`
+3. **Events to listen:**
+   - `checkout.session.completed`
+   - `checkout.session.expired`
+   - `invoice.payment_succeeded`
+   - `customer.subscription.created`
+4. **Copy Signing Secret**
+
+#### Environment Configuration:
+```bash
+# Add to Supabase Edge Functions env vars
+STRIPE_WEBHOOK_SIGNING_SECRET=whsec_[your-signing-secret]
+```
+
+### pg_cron Automated Tasks
+
+#### Enable Extension:
+```sql
+-- Run in Supabase SQL Editor
+CREATE EXTENSION IF NOT EXISTS "pg_cron";
+
+-- Grant permissions
+GRANT pg_cron_access TO postgres;
+```
+
+#### Daily Slot Generation Job:
+```sql
+-- Run every morning at 2 AM
+SELECT cron.schedule(
+    'daily-slot-generation',
+    '0 2 * * *',
+    $$
+    SELECT
+        net.http_get(
+            format('%s/functions/v1/generate-slots', current_setting('app.supabase_url')),
+            headers := jsonb_build_object(
+                'Content-Type', 'application/json',
+                'Authorization', format('Bearer %s', current_setting('app.service_role_key'))
+            ),
+            body := jsonb_build_object(
+              'days_ahead', 60
+            )
+        )
+    $$
+);
+```
+
+### Database Indexes for Performance
+
+```sql
+-- Essential production indexes
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_available_slots_court_date
+    ON available_slots(court_name, slot_date)
+    WHERE is_available = TRUE;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_available_slots_datetime
+    ON available_slots USING gist(tsrange(start_datetime, end_datetime));
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_bookings_slot_status
+    ON bookings(slot_id, status)
+    WHERE status IN ('confirmed', 'completed');
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_business_rules_lookup
+    ON business_rules(rule_type, rule_key, is_active)
+    WHERE is_active = TRUE;
+```
+
+## Production Deployment Checklist
+
+- [x] Code pushed to GitHub with production fixes
+- [x] Vercel project connected to GitHub repository
+- [x] Environment variables set in Vercel dashboard
+- [ ] FRONTEND_URL set in Supabase Edge Functions env vars (`https://01-hetk-booking-system.vercel.app`)
+- [x] VERCEL_JSON configured with API redirects
+- [ ] Stripe webhook endpoint registered (URL: `https://your-project.supabase.co/functions/v1/stripe-webhook`)
+- [ ] pg_cron enabled for automated slot generation
+- [ ] Production database indexes created
+- [ ] Business rules inserted for courts and pricing
+- [x] Booking confirmation page redirects properly
+- [x] Supabase RLS policies secure API access
+- [x] Vercel deployment succeeds without build errors
+- [ ] Test full booking flow in production environment
 
 This configuration guide provides practical, real-world examples for setting up and managing business rules in your booking system. The JSON-based approach ensures maximum flexibility while maintaining data integrity through validation functions.
